@@ -155,7 +155,7 @@ ubuntu_base() {  # $1 = ubuntu arch; echoes path
     pin="$(awk -v f="$name" '{n=$2; sub(/^\*/,"",n); if (n==f) print $1}' "$dir/SHA256SUMS")"
     [[ -n "$pin" ]] || { rm -f "$dir/SHA256SUMS"; die "$name not listed in SHA256SUMS (stale cache removed, rerun)"; }
   fi
-  fetch "$UBUNTU_MIRROR/$name" "$dir/$name" "$pin"
+  fetch "$UBUNTU_MIRROR/$name" "$dir/$name" "$pin" "http://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/$name"
   printf '%s' "$dir/$name"
 }
 

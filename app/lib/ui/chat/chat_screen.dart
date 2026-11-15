@@ -92,6 +92,7 @@ import 'chat_list.dart';
 import 'composer.dart';
 import 'composer_toast.dart';
 import 'dock/chat_dock.dart';
+import 'dock/root_pill.dart';
 import 'dock/dock_stack.dart';
 import 'empty_state.dart';
 import 'new_chat_options.dart';
@@ -2128,7 +2129,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                         if (!readOnly) ComposerStripSlot(sessionId: sessionId, visible: !running),
                                       ],
                                       accessory: pillsBesideStrip
-                                          ? _stripRisk(sessionId, autoApprove: chat?.autoApprove ?? false)
+                                          ? Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const RootPill(compact: true),
+                                                if (_stripRisk(sessionId, autoApprove: chat?.autoApprove ?? false) case final risk?) ...[
+                                                  const SizedBox(width: 6),
+                                                  risk,
+                                                ],
+                                              ],
+                                            )
                                           : null,
                                     ),
                                   ),
@@ -2142,7 +2152,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                     child: NativeComposerBar(
                                       sessionId: sessionId,
                                       visible: !running,
-                                      leading: pillsInCapsules ? composerPills : null,
+                                      // 终端胶囊与「完全权限」并排，都在输入框左侧。
+                                      leading: pillsInCapsules
+                                          ? Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const RootPill(),
+                                                if (composerPills != null) ...[
+                                                  const SizedBox(width: 6),
+                                                  composerPills,
+                                                ],
+                                              ],
+                                            )
+                                          : null,
                                       strip: false,
                                     ),
                                   ),

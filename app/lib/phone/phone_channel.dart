@@ -598,6 +598,7 @@ class PhoneStatus {
     this.tasks = const [],
     this.parallelLimit = 1,
     this.device = const PhoneDevice(),
+    this.shell = const PhoneShellStatus(),
     this.skills = const PhoneSkillStatus(),
     this.taskInterruption = const PhoneTaskInterruption(),
   });
@@ -621,6 +622,7 @@ class PhoneStatus {
       tasks = const [],
       parallelLimit = 1,
       device = const PhoneDevice(),
+      shell = const PhoneShellStatus(),
       skills = const PhoneSkillStatus(),
       taskInterruption = const PhoneTaskInterruption();
 
@@ -642,6 +644,7 @@ class PhoneStatus {
     tasks: _phoneTasks(m),
     parallelLimit: _int(m['parallelLimit']) ?? 1,
     device: PhoneDevice.fromMap(_map(m['device'])),
+    shell: PhoneShellStatus.fromMap(_map(m['shell'])),
     skills: PhoneSkillStatus.parse(m['skills']),
     taskInterruption: PhoneTaskInterruption.parse(m['taskInterruption']),
   );
@@ -677,6 +680,9 @@ class PhoneStatus {
   final List<PhoneTaskStatus> tasks;
   final int parallelLimit;
   final PhoneDevice device;
+
+  /// 终端权限：档位、允许的命令、脚本确认状态。
+  final PhoneShellStatus shell;
   final PhoneSkillStatus skills;
   final PhoneTaskInterruption taskInterruption;
 
@@ -684,7 +690,7 @@ class PhoneStatus {
   /// waiting to start, or one still draining. Mirrors the native refusal of 解除限制.
   bool get anyTaskBusy => task.active || tasks.any((t) => t.active || t.pendingCalls > 0 || t.draining);
 
-  PhoneStatus copyWith({bool? enabled, bool? ready, Object? error = _keepError}) => PhoneStatus(
+  PhoneStatus copyWith({bool? enabled, bool? ready, Object? error = _keepError, PhoneShellStatus? shell}) => PhoneStatus(
     ready: ready ?? this.ready,
     error: identical(error, _keepError) ? this.error : error as String?,
     statusRevision: statusRevision,
@@ -703,6 +709,7 @@ class PhoneStatus {
     tasks: tasks,
     parallelLimit: parallelLimit,
     device: device,
+    shell: shell ?? this.shell,
     skills: skills,
     taskInterruption: taskInterruption,
   );
@@ -1387,6 +1394,18 @@ class PhoneChannel {
   }
 
 
+  /// 终端权限档位：original / safe / full。
+  Future<bool> setShellMode(String mode) => _bool('setShellMode', {'mode': mode});
+
+  Future<bool> setAllowedCommands(List<String> commands) =>
+      _bool('setAllowedCommands', {'commands': commands});
+
+  Future<bool> setScriptConfirmBypass(bool on) =>
+      _bool('setScriptConfirmBypass', {'on': on});
+
+  Future<bool> setSdcardAllowed(bool on) =>
+      _bool('setSdcardAllowed', {'on': on});
+
   Future<bool> openAccessibilitySettings() => _bool('openAccessibilitySettings');
 
   Future<PhoneResult> grantSecureSettings() => _result('grantSecureSettings');
@@ -1593,4 +1612,61 @@ class PhoneChannel {
       return PhoneResult(false, e.message ?? e.code);
     }
   }
+}
+
+// ── 终端权限 ─────────────────────────────────────────────────────────────────
+
+/// `status()['shell']`：终端权限的三档 + 允许的命令 + 脚本确认状态。
+class PhoneShellStatus {
+  const PhoneShellStatus({
+    this.mode = 'original',
+    this.allowed = const <String>[],
+    this.sdcardAllowed = false,
+    this.commands = const <PhoneShellCommand>[],
+  });
+
+  factory PhoneShellStatus.fromMap(Map<Object?, Object?> m) => PhoneShellStatus(
+    mode: (m['mode'] as String?) ?? 'original',
+    allowed:
+        (m['allowed'] as List?)?.whereType<String>().toList(growable: false) ??
+        const <String>[],
+    sdcardAllowed: m['sdcardAllowed'] == true,
+    commands:
+        (m['commands'] as List?)
+            ?.whereType<Map>()
+            .map((e) => PhoneShellCommand.fromMap(e))
+            .toList(growable: false) ??
+        const <PhoneShellCommand>[],
+  );
+
+  /// original / safe / full。
+  final String mode;
+
+  /// 安全模式下用户勾选的命令名。
+  final List<String> allowed;
+  final bool sdcardAllowed;
+  final List<PhoneShellCommand> commands;
+
+  bool get isOriginal => mode == 'original';
+  bool get isFull => mode == 'full';
+  bool isAllowed(String name) => allowed.contains(name);
+}
+
+/// 命令清单里的一条：名字 + 分组。
+class PhoneShellCommand {
+  const PhoneShellCommand(this.name, this.group, {this.desc = ''});
+
+  factory PhoneShellCommand.fromMap(Map m) => PhoneShellCommand(
+    (m['name'] as String?) ?? '',
+    (m['group'] as String?) ?? '',
+    desc: (m['desc'] as String?) ?? '',
+  );
+
+  final String name;
+
+  /// read / file / system / network / packages / script。
+  final String group;
+
+  /// 一句话说明这个命令干什么，设置页显示。
+  final String desc;
 }
