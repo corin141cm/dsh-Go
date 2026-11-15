@@ -28,17 +28,25 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" --licenses > /dev/null 2>&1 || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
       - name: Install toolchain deps
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq zstd file gpgv
 
+      - name: Cache runtime downloads
+        uses: actions/cache@v4
+        with:
+          path: runtime/.cache
+          key: runtime-downloads-v1-${{ hashFiles('runtime/build-runtime.sh', 'runtime/locks/**') }}
+          restore-keys: runtime-downloads-v1-
+
       - name: Build runtime (arm64-v8a)
         run: bash runtime/build-runtime.sh arm64-v8a
 
       - name: Build APK
-        run: DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh -f arm64
+        run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh -f arm64
 
       - name: Show artifacts
         run: find app/build/app/outputs -name '*.apk' -exec ls -lh {} \;
