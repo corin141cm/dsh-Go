@@ -11,6 +11,12 @@ jobs:
     timeout-minutes: 90
     env:
       DSH_MAVEN_MIRRORS: 0
+      UBUNTU_MIRROR: https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release
+      UBUNTU_ARCHIVE_AMD64: http://archive.ubuntu.com/ubuntu
+      UBUNTU_ARCHIVE_ARM64: http://ports.ubuntu.com/ubuntu-ports
+      NODE_MIRROR: https://nodejs.org/dist
+      NPM_REGISTRY: https://registry.npmjs.org
+      PBS_MIRROR: https://github.com/astral-sh/python-build-standalone/releases/download
     steps:
       - uses: actions/checkout@v5
 
@@ -30,20 +36,35 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" "ndk;28.2.13676358"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
-      - name: Install toolchain deps
+      - name: Prepare runtime (arm64-v8a)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq zstd file gpgv
-
-      - name: Cache runtime downloads
-        uses: actions/cache@v4
-        with:
-          path: runtime/.cache
-          key: runtime-downloads-v1-${{ hashFiles('runtime/build-runtime.sh', 'runtime/locks/**') }}
-          restore-keys: runtime-downloads-v1-
-
-      - name: Build runtime (arm64-v8a)
-        run: bash runtime/build-runtime.sh arm64-v8a
+          python3 - <<'PY'
+          import urllib.request, zipfile, pathlib, shutil
+          url = "https://github.com/ccch1mneyyy/dsh-go/releases/download/v1.1.0/dsh-go-1.1.0-arm64.apk"
+          apk_path = pathlib.Path("/tmp/dsh-go-1.1.0-arm64.apk")
+          with urllib.request.urlopen(url, timeout=120) as r, apk_path.open("wb") as out:
+              shutil.copyfileobj(r, out)
+          out_root = pathlib.Path("runtime/out/arm64-v8a")
+          with zipfile.ZipFile(apk_path) as zf:
+              for name in zf.namelist():
+                  if name.startswith("assets/runtime/") and not name.endswith("/"):
+                      dest = out_root / name
+                      dest.parent.mkdir(parents=True, exist_ok=True)
+                      with zf.open(name) as src, dest.open("wb") as dst:
+                          shutil.copyfileobj(src, dst)
+                  elif name in (
+                      "lib/arm64-v8a/libproot.so",
+                      "lib/arm64-v8a/libproot-loader.so",
+                      "lib/arm64-v8a/libtalloc.so",
+                      "lib/arm64-v8a/libandroid-shmem.so",
+                  ):
+                      dest = out_root / "jniLibs/arm64-v8a" / pathlib.Path(name).name
+                      dest.parent.mkdir(parents=True, exist_ok=True)
+                      with zf.open(name) as src, dest.open("wb") as dst:
+                          shutil.copyfileobj(src, dst)
+          apk_path.unlink(missing_ok=True)
+          PY
+          python3 -I tooling/check_runtime_bundle.py arm64
 
       - name: Build APK
         run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh -f arm64
